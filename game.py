@@ -10,14 +10,19 @@
 import pygame
 import random
 
-# 1. Инициализация Pygame и настройка поля
+# Инициализация Pygame
 pygame.init()
 
+# Настройки экрана
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 GRID_SIZE = 30
 GRID_WIDTH = 10
 GRID_HEIGHT = 20
+
+# Центрирование игрового поля
+GRID_OFFSET_X = (SCREEN_WIDTH - GRID_WIDTH * GRID_SIZE) // 2
+GRID_OFFSET_Y = (SCREEN_HEIGHT - GRID_HEIGHT * GRID_SIZE) // 2
 
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Тетрис")
@@ -46,17 +51,20 @@ SHAPES = [
 
 SHAPE_COLORS = [CYAN, YELLOW, MAGENTA, BLUE, ORANGE, GREEN, RED]
 
+# Игровое поле
 grid = [[0 for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
 
+# Настройки игры
 clock = pygame.time.Clock()
 FPS = 60
 current_piece = None
 next_piece = None
 score = 0
 game_over = False
+paused = False
 
 
-# 2. Функция создания новой фигуры
+# Создание новой фигуры
 def new_piece():
     shape = random.choice(SHAPES)
     color = SHAPE_COLORS[SHAPES.index(shape)]
@@ -73,7 +81,7 @@ current_piece = new_piece()
 next_piece = new_piece()
 
 
-# 3. Проверка столкновений
+# Проверка столкновений
 def check_collision(piece, grid, dx=0, dy=0):
     for y, row in enumerate(piece["shape"]):
         for x, cell in enumerate(row):
@@ -87,7 +95,7 @@ def check_collision(piece, grid, dx=0, dy=0):
     return False
 
 
-# 4. Поворот фигуры
+# Поворот фигуры
 def rotate_piece(piece, grid):
     rotated = [list(row) for row in zip(*piece["shape"][::-1])]
     old_shape = piece["shape"]
@@ -96,7 +104,7 @@ def rotate_piece(piece, grid):
         piece["shape"] = old_shape
 
 
-# 5. Очистка линий
+# Очистка линий
 def clear_lines(grid):
     lines_cleared = 0
     for y in range(GRID_HEIGHT):
@@ -108,7 +116,7 @@ def clear_lines(grid):
     return lines_cleared
 
 
-# 6. Основной игровой цикл
+# Основной игровой цикл
 fall_time = 0
 fall_speed = 0.5
 
@@ -117,56 +125,86 @@ while running:
     dt = clock.tick(FPS) / 1000
     fall_time += dt
 
+    # Обработка событий
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT and not check_collision(current_piece, grid, dx=-1):
-                current_piece["x"] -= 1
-            if event.key == pygame.K_RIGHT and not check_collision(current_piece, grid, dx=1):
-                current_piece["x"] += 1
-            if event.key == pygame.K_DOWN and not check_collision(current_piece, grid, dy=1):
+            if event.key == pygame.K_p:  # Пауза по клавише P
+                paused = not paused
+            if not paused and not game_over:
+                if event.key == pygame.K_LEFT and not check_collision(current_piece, grid, dx=-1):
+                    current_piece["x"] -= 1
+                if event.key == pygame.K_RIGHT and not check_collision(current_piece, grid, dx=1):
+                    current_piece["x"] += 1
+                if event.key == pygame.K_DOWN and not check_collision(current_piece, grid, dy=1):
+                    current_piece["y"] += 1
+                if event.key == pygame.K_UP:
+                    rotate_piece(current_piece, grid)
+
+    # Игровая логика
+    if not paused and not game_over:
+        if fall_time >= fall_speed:
+            fall_time = 0
+            if not check_collision(current_piece, grid, dy=1):
                 current_piece["y"] += 1
-            if event.key == pygame.K_UP:
-                rotate_piece(current_piece, grid)
+            else:
+                # Фиксируем фигуру в сетке
+                for y, row in enumerate(current_piece["shape"]):
+                    for x, cell in enumerate(row):
+                        if cell and current_piece["y"] + y >= 0:
+                            grid[current_piece["y"] + y][current_piece["x"] + x] = current_piece["color"]
 
-    if fall_time >= fall_speed:
-        fall_time = 0
-        if not check_collision(current_piece, grid, dy=1):
-            current_piece["y"] += 1
-        else:
-            for y, row in enumerate(current_piece["shape"]):
-                for x, cell in enumerate(row):
-                    if cell and current_piece["y"] + y >= 0:
-                        grid[current_piece["y"] + y][current_piece["x"] + x] = current_piece["color"]
+                # Проверка линий
+                lines = clear_lines(grid)
+                score += lines * 100
 
-            lines = clear_lines(grid)
-            score += lines * 100
+                # Новая фигура
+                current_piece = next_piece
+                next_piece = new_piece()
+                if check_collision(current_piece, grid):
+                    game_over = True
 
-            current_piece = next_piece
-            next_piece = new_piece()
-            if check_collision(current_piece, grid):
-                game_over = True
-
+    # Отрисовка
     screen.fill(BLACK)
 
+    # Рисуем границы игрового поля
+    pygame.draw.rect(screen, WHITE,
+                     (GRID_OFFSET_X - 2, GRID_OFFSET_Y - 2,
+                      GRID_WIDTH * GRID_SIZE + 4, GRID_HEIGHT * GRID_SIZE + 4), 2)
+
+    # Отрисовка сетки
     for y in range(GRID_HEIGHT):
         for x in range(GRID_WIDTH):
             if grid[y][x]:
                 pygame.draw.rect(screen, grid[y][x],
-                                 (x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE - 1, GRID_SIZE - 1))
+                                 (GRID_OFFSET_X + x * GRID_SIZE,
+                                  GRID_OFFSET_Y + y * GRID_SIZE,
+                                  GRID_SIZE - 1, GRID_SIZE - 1))
 
+    # Отрисовка текущей фигуры
     for y, row in enumerate(current_piece["shape"]):
         for x, cell in enumerate(row):
             if cell:
                 pygame.draw.rect(screen, current_piece["color"],
-                                 ((current_piece["x"] + x) * GRID_SIZE,
-                                  (current_piece["y"] + y) * GRID_SIZE,
+                                 (GRID_OFFSET_X + (current_piece["x"] + x) * GRID_SIZE,
+                                  GRID_OFFSET_Y + (current_piece["y"] + y) * GRID_SIZE,
                                   GRID_SIZE - 1, GRID_SIZE - 1))
 
+    # Отрисовка счёта
     font = pygame.font.Font(None, 36)
     score_text = font.render(f"Счёт: {score}", True, WHITE)
-    screen.blit(score_text, (GRID_WIDTH * GRID_SIZE + 20, 20))
+    screen.blit(score_text, (GRID_OFFSET_X + GRID_WIDTH * GRID_SIZE + 20, 20))
+
+    # Сообщение Game Over
+    if game_over:
+        game_over_text = font.render("Игра окончена!", True, RED)
+        screen.blit(game_over_text, (SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 - 18))
+
+    # Сообщение паузы
+    if paused:
+        pause_text = font.render("ПАУЗА", True, YELLOW)
+        screen.blit(pause_text, (SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT // 2 - 18))
 
     pygame.display.flip()
 
